@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { supabase, DEMO_WORKSPACE_ID } from "@/lib/supabase";
+import { useAuth } from "./AuthContext";
 import { ActivityItem, AlertItem, Clause, Contract, ContractVersion, Obligation, WorkspaceMember, WorkspaceSettings } from "./ContractLensData";
 
 type Row = Record<string, any>;
@@ -37,6 +38,7 @@ function mapObligation(row: Row): Obligation {
 }
 
 export function ContractLensProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [obligations, setObligations] = useState<Obligation[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
@@ -58,7 +60,7 @@ export function ContractLensProvider({ children }: { children: React.ReactNode }
       supabase.from("contract_clauses").select("*").order("page_number", { ascending: true }),
       supabase.from("contract_versions").select("*").order("version_date", { ascending: false }),
       supabase.from("activities").select("*").eq("workspace_id", DEMO_WORKSPACE_ID).order("created_at", { ascending: false }).limit(20),
-      supabase.from("workspace_members").select("*").eq("workspace_id", DEMO_WORKSPACE_ID).limit(1).maybeSingle(),
+      supabase.from("workspace_members").select("*").eq("workspace_id", DEMO_WORKSPACE_ID).eq("email", user?.email ?? "__anonymous__").limit(1).maybeSingle(),
       supabase.from("workspace_settings").select("*").eq("workspace_id", DEMO_WORKSPACE_ID).maybeSingle(),
     ]);
     const failed = [contractsResult, obligationsResult, alertsResult, clausesResult, versionsResult, activitiesResult, memberResult, settingsResult].find((result) => result.error);
@@ -76,7 +78,21 @@ export function ContractLensProvider({ children }: { children: React.ReactNode }
     setLoading(false);
   };
 
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    if (!user) {
+      setContracts([]);
+      setObligations([]);
+      setAlerts([]);
+      setClauses([]);
+      setVersions([]);
+      setActivities([]);
+      setMember(null);
+      setSettings(null);
+      setLoading(false);
+      return;
+    }
+    void refresh();
+  }, [user?.email]);
 
   const value = useMemo<ContractLensContextValue>(() => ({
     contracts,

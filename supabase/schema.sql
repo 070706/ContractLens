@@ -102,6 +102,31 @@ create table if not exists public.workspace_settings (
   created_at timestamptz not null default now()
 );
 
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.workspace_members (workspace_id, name, email, role, team, initials)
+  values (
+    '00000000-0000-0000-0000-000000000001',
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    new.email,
+    'Workspace member',
+    'Operations',
+    upper(left(coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)), 2))
+  )
+  on conflict (workspace_id, email) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute procedure public.handle_new_user();
+
 create table if not exists public.homepage_settings (
   id text primary key default 'default',
   brand_name text not null,
@@ -195,9 +220,165 @@ create table if not exists public.homepage_footer_items (
   enabled boolean not null default true
 );
 
+create table if not exists public.workspace_shell_content (
+  id text primary key default 'default',
+  brand_name text not null,
+  brand_tagline text not null,
+  workspace_label text not null,
+  manage_label text not null,
+  cta_title text not null,
+  cta_description text not null,
+  cta_link_label text not null,
+  cta_link text not null,
+  search_placeholder text not null,
+  shortcut_label text not null,
+  sign_out_label text not null,
+  settings_label text not null,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.workspace_navigation (
+  id text primary key,
+  label text not null,
+  path text not null,
+  icon_name text not null,
+  section text not null check (section in ('workspace', 'manage')),
+  sort_order integer not null default 0,
+  enabled boolean not null default true
+);
+
+create table if not exists public.dashboard_content (
+  id text primary key default 'default',
+  eyebrow text not null,
+  title_template text not null,
+  description text not null,
+  upload_label text not null,
+  deadlines_title text not null,
+  deadlines_description text not null,
+  renewals_title text not null,
+  renewals_description text not null,
+  contracts_title text not null,
+  contracts_description text not null,
+  status_title text not null,
+  obligation_status_title text not null,
+  activity_title text not null,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.dashboard_metrics (
+  id text primary key,
+  label text not null,
+  detail text not null,
+  metric_key text not null,
+  icon_name text not null,
+  tone text not null check (tone in ('mint', 'blue', 'peach', 'lilac')),
+  sort_order integer not null default 0,
+  enabled boolean not null default true
+);
+
+create table if not exists public.auth_page_content (
+  id text primary key default 'default',
+  brand_name text not null,
+  brand_tagline text not null,
+  eyebrow text not null,
+  title text not null,
+  title_accent text not null,
+  description text not null,
+  login_eyebrow text not null,
+  login_title text not null,
+  login_description text not null,
+  signup_eyebrow text not null,
+  signup_title text not null,
+  signup_description text not null,
+  email_label text not null,
+  email_placeholder text not null,
+  password_label text not null,
+  password_placeholder text not null,
+  submit_login_label text not null,
+  submit_signup_label text not null,
+  switch_login_label text not null,
+  switch_signup_label text not null,
+  success_message text not null,
+  benefit_one text not null,
+  benefit_two text not null,
+  benefit_three text not null,
+  updated_at timestamptz not null default now()
+);
+
 insert into public.workspaces (id, name)
 values ('00000000-0000-0000-0000-000000000001', 'ContractLens Demo Workspace')
 on conflict (id) do update set name = excluded.name;
+
+insert into public.workspace_shell_content (id, brand_name, brand_tagline, workspace_label, manage_label, cta_title, cta_description, cta_link_label, cta_link, search_placeholder, shortcut_label, sign_out_label, settings_label)
+values ('default', 'contractlens', 'contract intelligence', 'Workspace', 'Manage', 'Lens intelligence', 'Upload a document and trace every insight to its clause.', 'Upload a contract', '/contracts/upload', 'Search contracts...', '⌘ K', 'Sign out', 'Settings')
+on conflict (id) do update set
+  brand_name = excluded.brand_name, brand_tagline = excluded.brand_tagline,
+  workspace_label = excluded.workspace_label, manage_label = excluded.manage_label, cta_title = excluded.cta_title,
+  cta_description = excluded.cta_description, cta_link_label = excluded.cta_link_label, cta_link = excluded.cta_link,
+  search_placeholder = excluded.search_placeholder, shortcut_label = excluded.shortcut_label,
+  sign_out_label = excluded.sign_out_label, settings_label = excluded.settings_label, updated_at = now();
+
+insert into public.workspace_navigation (id, label, path, icon_name, section, sort_order)
+values
+  ('dashboard', 'Dashboard', '/dashboard', 'LayoutDashboard', 'workspace', 1),
+  ('contracts', 'Contracts', '/contracts', 'FileText', 'workspace', 2),
+  ('obligations', 'Obligations', '/obligations', 'ListChecks', 'workspace', 3),
+  ('alerts', 'Alerts', '/alerts', 'ShieldAlert', 'workspace', 4),
+  ('settings', 'Settings', '/settings', 'Settings2', 'manage', 1)
+on conflict (id) do update set
+  label = excluded.label, path = excluded.path, icon_name = excluded.icon_name,
+  section = excluded.section, sort_order = excluded.sort_order, enabled = excluded.enabled;
+
+insert into public.dashboard_content (id, eyebrow, title_template, description, upload_label, deadlines_title, deadlines_description, renewals_title, renewals_description, contracts_title, contracts_description, status_title, obligation_status_title, activity_title)
+values ('default', 'Workspace overview', 'Good morning, {name}', 'Your contracts, obligations, and review work at a glance.', 'Upload contract', 'Upcoming deadlines', 'The next actions across your active agreements', 'Upcoming renewals', 'Notice windows you should not miss', 'Recent contracts', 'Latest document activity', 'Contract status', 'Obligation status', 'Recent activity')
+on conflict (id) do update set
+  eyebrow = excluded.eyebrow, title_template = excluded.title_template, description = excluded.description,
+  upload_label = excluded.upload_label, deadlines_title = excluded.deadlines_title, deadlines_description = excluded.deadlines_description,
+  renewals_title = excluded.renewals_title, renewals_description = excluded.renewals_description,
+  contracts_title = excluded.contracts_title, contracts_description = excluded.contracts_description,
+  status_title = excluded.status_title, obligation_status_title = excluded.obligation_status_title,
+  activity_title = excluded.activity_title, updated_at = now();
+
+insert into public.dashboard_metrics (id, label, detail, metric_key, icon_name, tone, sort_order)
+values
+  ('total-contracts', 'Total contracts', 'Current workspace total', 'totalContracts', 'FolderOpen', 'mint', 1),
+  ('active-contracts', 'Active contracts', 'Current portfolio share', 'activeContracts', 'CheckCircle2', 'blue', 2),
+  ('expiring-contracts', 'Expiring soon', 'Next 90 days', 'expiringSoon', 'Clock3', 'lilac', 3),
+  ('pending-obligations', 'Pending obligations', 'Needs action', 'pendingObligations', 'ListChecks', 'mint', 4),
+  ('overdue-obligations', 'Overdue', 'Needs action', 'overdueObligations', 'AlertTriangle', 'peach', 5),
+  ('review-items', 'Requires review', 'High-risk clauses', 'reviewItems', 'ShieldAlert', 'peach', 6)
+on conflict (id) do update set
+  label = excluded.label, detail = excluded.detail, metric_key = excluded.metric_key,
+  icon_name = excluded.icon_name, tone = excluded.tone, sort_order = excluded.sort_order, enabled = excluded.enabled;
+
+insert into public.auth_page_content (
+  id, brand_name, brand_tagline, eyebrow, title, title_accent, description,
+  login_eyebrow, login_title, login_description, signup_eyebrow, signup_title, signup_description,
+  email_label, email_placeholder, password_label, password_placeholder,
+  submit_login_label, submit_signup_label, switch_login_label, switch_signup_label,
+  success_message, benefit_one, benefit_two, benefit_three
+) values (
+  'default', 'contractlens', 'contract intelligence', 'AI-powered clarity',
+  'Contracts are complex.', 'Your work doesn''t have to be.',
+  'A calmer way for business teams to understand commitments, spot risk, and keep every deadline in view.',
+  'Welcome back', 'Good to see you again.', 'Pick up where your contract workspace left off.',
+  'Create your workspace', 'Start seeing clearly.', 'Bring your contracts into focus in minutes.',
+  'Work email', 'you@company.com', 'Password', 'Enter your password',
+  'Log in', 'Create your workspace', 'Already have an account? Log in', 'New to ContractLens? Create an account',
+  'Check your email to confirm your account before signing in.',
+  'No legal advice claims', 'Traceable to source language', 'Built for business teams'
+)
+on conflict (id) do update set
+  brand_name = excluded.brand_name, brand_tagline = excluded.brand_tagline, eyebrow = excluded.eyebrow,
+  title = excluded.title, title_accent = excluded.title_accent, description = excluded.description,
+  login_eyebrow = excluded.login_eyebrow, login_title = excluded.login_title, login_description = excluded.login_description,
+  signup_eyebrow = excluded.signup_eyebrow, signup_title = excluded.signup_title, signup_description = excluded.signup_description,
+  email_label = excluded.email_label, email_placeholder = excluded.email_placeholder,
+  password_label = excluded.password_label, password_placeholder = excluded.password_placeholder,
+  submit_login_label = excluded.submit_login_label, submit_signup_label = excluded.submit_signup_label,
+  switch_login_label = excluded.switch_login_label, switch_signup_label = excluded.switch_signup_label,
+  success_message = excluded.success_message, benefit_one = excluded.benefit_one,
+  benefit_two = excluded.benefit_two, benefit_three = excluded.benefit_three, updated_at = now();
 
 insert into public.homepage_settings (
   id, brand_name, brand_tagline, footer_text, hero_eyebrow, hero_title, hero_description,
@@ -381,6 +562,11 @@ alter table public.homepage_workflow_steps enable row level security;
 alter table public.homepage_preview enable row level security;
 alter table public.homepage_preview_events enable row level security;
 alter table public.homepage_footer_items enable row level security;
+alter table public.auth_page_content enable row level security;
+alter table public.workspace_shell_content enable row level security;
+alter table public.workspace_navigation enable row level security;
+alter table public.dashboard_content enable row level security;
+alter table public.dashboard_metrics enable row level security;
 alter table public.workspaces enable row level security;
 alter table public.contracts enable row level security;
 alter table public.obligations enable row level security;
@@ -405,32 +591,42 @@ drop policy if exists homepage_preview_events_read on public.homepage_preview_ev
 create policy homepage_preview_events_read on public.homepage_preview_events for select to anon, authenticated using (enabled);
 drop policy if exists homepage_footer_items_read on public.homepage_footer_items;
 create policy homepage_footer_items_read on public.homepage_footer_items for select to anon, authenticated using (enabled);
+drop policy if exists auth_page_content_read on public.auth_page_content;
+create policy auth_page_content_read on public.auth_page_content for select to anon, authenticated using (true);
+drop policy if exists workspace_shell_content_read on public.workspace_shell_content;
+create policy workspace_shell_content_read on public.workspace_shell_content for select to anon, authenticated using (true);
+drop policy if exists workspace_navigation_read on public.workspace_navigation;
+create policy workspace_navigation_read on public.workspace_navigation for select to anon, authenticated using (enabled);
+drop policy if exists dashboard_content_read on public.dashboard_content;
+create policy dashboard_content_read on public.dashboard_content for select to anon, authenticated using (true);
+drop policy if exists dashboard_metrics_read on public.dashboard_metrics;
+create policy dashboard_metrics_read on public.dashboard_metrics for select to anon, authenticated using (enabled);
 
 drop policy if exists workspaces_read on public.workspaces;
-create policy workspaces_read on public.workspaces for select to anon, authenticated using (id = '00000000-0000-0000-0000-000000000001');
+create policy workspaces_read on public.workspaces for select to authenticated using (id = '00000000-0000-0000-0000-000000000001');
 drop policy if exists contracts_read on public.contracts;
-create policy contracts_read on public.contracts for select to anon, authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001');
+create policy contracts_read on public.contracts for select to authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001');
 drop policy if exists contracts_insert on public.contracts;
-create policy contracts_insert on public.contracts for insert to anon, authenticated with check (workspace_id = '00000000-0000-0000-0000-000000000001');
+create policy contracts_insert on public.contracts for insert to authenticated with check (workspace_id = '00000000-0000-0000-0000-000000000001');
 drop policy if exists contracts_update on public.contracts;
-create policy contracts_update on public.contracts for update to anon, authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001') with check (workspace_id = '00000000-0000-0000-0000-000000000001');
+create policy contracts_update on public.contracts for update to authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001') with check (workspace_id = '00000000-0000-0000-0000-000000000001');
 drop policy if exists obligations_read on public.obligations;
-create policy obligations_read on public.obligations for select to anon, authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001');
+create policy obligations_read on public.obligations for select to authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001');
 drop policy if exists obligations_update on public.obligations;
-create policy obligations_update on public.obligations for update to anon, authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001') with check (workspace_id = '00000000-0000-0000-0000-000000000001');
+create policy obligations_update on public.obligations for update to authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001') with check (workspace_id = '00000000-0000-0000-0000-000000000001');
 drop policy if exists alerts_read on public.alerts;
-create policy alerts_read on public.alerts for select to anon, authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001');
+create policy alerts_read on public.alerts for select to authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001');
 drop policy if exists alerts_update on public.alerts;
-create policy alerts_update on public.alerts for update to anon, authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001') with check (workspace_id = '00000000-0000-0000-0000-000000000001');
+create policy alerts_update on public.alerts for update to authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001') with check (workspace_id = '00000000-0000-0000-0000-000000000001');
 drop policy if exists clauses_read on public.contract_clauses;
-create policy clauses_read on public.contract_clauses for select to anon, authenticated using (exists (select 1 from public.contracts where contracts.id = contract_clauses.contract_id and contracts.workspace_id = '00000000-0000-0000-0000-000000000001'));
+create policy clauses_read on public.contract_clauses for select to authenticated using (exists (select 1 from public.contracts where contracts.id = contract_clauses.contract_id and contracts.workspace_id = '00000000-0000-0000-0000-000000000001'));
 drop policy if exists versions_read on public.contract_versions;
-create policy versions_read on public.contract_versions for select to anon, authenticated using (exists (select 1 from public.contracts where contracts.id = contract_versions.contract_id and contracts.workspace_id = '00000000-0000-0000-0000-000000000001'));
+create policy versions_read on public.contract_versions for select to authenticated using (exists (select 1 from public.contracts where contracts.id = contract_versions.contract_id and contracts.workspace_id = '00000000-0000-0000-0000-000000000001'));
 drop policy if exists activities_read on public.activities;
-create policy activities_read on public.activities for select to anon, authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001');
+create policy activities_read on public.activities for select to authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001');
 drop policy if exists members_read on public.workspace_members;
-create policy members_read on public.workspace_members for select to anon, authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001');
+create policy members_read on public.workspace_members for select to authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001' and email = (auth.jwt() ->> 'email'));
 drop policy if exists settings_read on public.workspace_settings;
-create policy settings_read on public.workspace_settings for select to anon, authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001');
+create policy settings_read on public.workspace_settings for select to authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001');
 drop policy if exists settings_update on public.workspace_settings;
-create policy settings_update on public.workspace_settings for update to anon, authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001') with check (workspace_id = '00000000-0000-0000-0000-000000000001');
+create policy settings_update on public.workspace_settings for update to authenticated using (workspace_id = '00000000-0000-0000-0000-000000000001') with check (workspace_id = '00000000-0000-0000-0000-000000000001');

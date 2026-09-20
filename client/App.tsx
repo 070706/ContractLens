@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ContractLensProvider } from "./components/ContractLensContext";
+import { AuthProvider, RequireAuth } from "./components/AuthContext";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -27,21 +28,23 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <ContractLensProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/contracts" element={<Contracts />} />
-            <Route path="/contracts/upload" element={<UploadContract />} />
-            <Route path="/contracts/:id" element={<ContractDetail />} />
-            <Route path="/compare" element={<Compare />} />
-            <Route path="/obligations" element={<Obligations />} />
-            <Route path="/alerts" element={<Alerts />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </ContractLensProvider>
+        <AuthProvider>
+          <ContractLensProvider>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+              <Route path="/contracts" element={<RequireAuth><Contracts /></RequireAuth>} />
+              <Route path="/contracts/upload" element={<RequireAuth><UploadContract /></RequireAuth>} />
+              <Route path="/contracts/:id" element={<RequireAuth><ContractDetail /></RequireAuth>} />
+              <Route path="/compare" element={<RequireAuth><Compare /></RequireAuth>} />
+              <Route path="/obligations" element={<RequireAuth><Obligations /></RequireAuth>} />
+              <Route path="/alerts" element={<RequireAuth><Alerts /></RequireAuth>} />
+              <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </ContractLensProvider>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
