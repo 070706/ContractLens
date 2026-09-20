@@ -365,7 +365,7 @@ insert into public.auth_page_content (
   'Create your workspace', 'Start seeing clearly.', 'Bring your contracts into focus in minutes.',
   'Work email', 'you@company.com', 'Password', 'Enter your password',
   'Log in', 'Create your workspace', 'Already have an account? Log in', 'New to ContractLens? Create an account',
-  'Check your email to confirm your account before signing in.',
+  'Your workspace is ready. You can sign in now.',
   'No legal advice claims', 'Traceable to source language', 'Built for business teams'
 )
 on conflict (id) do update set

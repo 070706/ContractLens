@@ -46,10 +46,14 @@ export default function Login() {
       : await supabase.auth.signInWithPassword({ email, password });
     if (result.error) {
       setSubmitted(false);
-      setError(result.error.message);
+      setError(result.error.code === "email_not_confirmed" ? "This account is still marked as unconfirmed in Supabase. Disable confirmation or confirm this existing account, then sign in again." : result.error.message);
       return;
     }
-    if (signup && !result.data.session) return;
+    if (signup && !result.data.session) {
+      setSubmitted(false);
+      setResetMessage(content.success_message);
+      return;
+    }
     navigate("/dashboard");
   };
 
