@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { supabase, DEMO_WORKSPACE_ID } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "./AuthContext";
 import { ActivityItem, AlertItem, Clause, Contract, ContractVersion, Obligation, WorkspaceMember, WorkspaceSettings } from "./ContractLensData";
 
 type Row = Record<string, any>;
@@ -37,6 +38,7 @@ function mapObligation(row: Row): Obligation {
 }
 
 export function ContractLensProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [obligations, setObligations] = useState<Obligation[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
@@ -45,21 +47,31 @@ export function ContractLensProvider({ children }: { children: React.ReactNode }
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [member, setMember] = useState<WorkspaceMember | null>(null);
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
     setLoading(true);
     setError(null);
+    if (!user) return;
+    const workspaceResult = await supabase.from("workspaces").select("id").eq("owner_id", user.id).single();
+    if (workspaceResult.error || !workspaceResult.data) {
+      setError(workspaceResult.error?.message ?? "Workspace not found");
+      setLoading(false);
+      return;
+    }
+    const currentWorkspaceId = workspaceResult.data.id;
+    setWorkspaceId(currentWorkspaceId);
     const [contractsResult, obligationsResult, alertsResult, clausesResult, versionsResult, activitiesResult, memberResult, settingsResult] = await Promise.all([
-      supabase.from("contracts").select("*").eq("workspace_id", DEMO_WORKSPACE_ID).order("updated_at", { ascending: false }),
-      supabase.from("obligations").select("*").eq("workspace_id", DEMO_WORKSPACE_ID).order("deadline", { ascending: true }),
-      supabase.from("alerts").select("*").eq("workspace_id", DEMO_WORKSPACE_ID).is("dismissed_at", null).order("created_at", { ascending: false }),
+      supabase.from("contracts").select("*").eq("workspace_id", currentWorkspaceId).order("updated_at", { ascending: false }),
+      supabase.from("obligations").select("*").eq("workspace_id", currentWorkspaceId).order("deadline", { ascending: true }),
+      supabase.from("alerts").select("*").eq("workspace_id", currentWorkspaceId).is("dismissed_at", null).order("created_at", { ascending: false }),
       supabase.from("contract_clauses").select("*").order("page_number", { ascending: true }),
       supabase.from("contract_versions").select("*").order("version_date", { ascending: false }),
-      supabase.from("activities").select("*").eq("workspace_id", DEMO_WORKSPACE_ID).order("created_at", { ascending: false }).limit(20),
-      supabase.from("workspace_members").select("*").eq("workspace_id", DEMO_WORKSPACE_ID).limit(1).maybeSingle(),
-      supabase.from("workspace_settings").select("*").eq("workspace_id", DEMO_WORKSPACE_ID).maybeSingle(),
+      supabase.from("activities").select("*").eq("workspace_id", currentWorkspaceId).order("created_at", { ascending: false }).limit(20),
+      supabase.from("workspace_members").select("*").eq("workspace_id", currentWorkspaceId).eq("email", user.email ?? "__anonymous__").limit(1).maybeSingle(),
+      supabase.from("workspace_settings").select("*").eq("workspace_id", currentWorkspaceId).maybeSingle(),
     ]);
     const failed = [contractsResult, obligationsResult, alertsResult, clausesResult, versionsResult, activitiesResult, memberResult, settingsResult].find((result) => result.error);
     if (failed?.error) setError(failed.error.message);
@@ -76,7 +88,22 @@ export function ContractLensProvider({ children }: { children: React.ReactNode }
     setLoading(false);
   };
 
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    if (!user) {
+      setContracts([]);
+      setObligations([]);
+      setAlerts([]);
+      setClauses([]);
+      setVersions([]);
+      setActivities([]);
+      setMember(null);
+      setSettings(null);
+      setWorkspaceId(null);
+      setLoading(false);
+      return;
+    }
+    void refresh();
+  }, [user?.email]);
 
   const value = useMemo<ContractLensContextValue>(() => ({
     contracts,
@@ -91,7 +118,8 @@ export function ContractLensProvider({ children }: { children: React.ReactNode }
     error,
     refresh,
     addContract: async (contract) => {
-      const { data, error: insertError } = await supabase.from("contracts").insert({ workspace_id: DEMO_WORKSPACE_ID, name: contract.name, contract_type: contract.type, parties: contract.parties, status: contract.status, risk: contract.risk, effective_date: contract.effectiveDate, expiration_date: contract.expiration, renewal_date: contract.renewal, icon: contract.icon, color_class: contract.color }).select().single();
+      if (!workspaceId) return null;
+      const { data, error: insertError } = await supabase.from("contracts").insert({ workspace_id: workspaceId, name: contract.name, contract_type: contract.type, parties: contract.parties, status: contract.status, risk: contract.risk, effective_date: contract.effectiveDate, expiration_date: contract.expiration, renewal_date: contract.renewal, icon: contract.icon, color_class: contract.color }).select().single();
       if (insertError || !data) { setError(insertError?.message ?? "Unable to add contract"); return null; }
       await refresh();
       return mapContract(data);
@@ -99,8 +127,8 @@ export function ContractLensProvider({ children }: { children: React.ReactNode }
     completeObligation: async (id) => { const { error: updateError } = await supabase.from("obligations").update({ status: "Completed", completed_at: new Date().toISOString() }).eq("id", id); if (updateError) setError(updateError.message); await refresh(); },
     markAlertRead: async (id) => { const { error: updateError } = await supabase.from("alerts").update({ is_read: true }).eq("id", id); if (updateError) setError(updateError.message); await refresh(); },
     dismissAlert: async (id) => { const { error: updateError } = await supabase.from("alerts").update({ dismissed_at: new Date().toISOString() }).eq("id", id); if (updateError) setError(updateError.message); await refresh(); },
-    updateSettings: async (next) => { const payload: Row = {}; if (next.notificationDays) payload.notification_days = next.notificationDays; if (next.organization) payload.organization = next.organization; if (next.aiSummaryStyle) payload.ai_summary_style = next.aiSummaryStyle; const { error: updateError } = await supabase.from("workspace_settings").update(payload).eq("workspace_id", DEMO_WORKSPACE_ID); if (updateError) setError(updateError.message); await refresh(); },
-  }), [activities, alerts, clauses, contracts, error, loading, member, obligations, refresh, settings, versions]);
+    updateSettings: async (next) => { const payload: Row = {}; if (next.notificationDays) payload.notification_days = next.notificationDays; if (next.organization) payload.organization = next.organization; if (next.aiSummaryStyle) payload.ai_summary_style = next.aiSummaryStyle; const { error: updateError } = await supabase.from("workspace_settings").update(payload).eq("workspace_id", workspaceId); if (updateError) setError(updateError.message); await refresh(); },
+  }), [activities, alerts, clauses, contracts, error, loading, member, obligations, refresh, settings, versions, workspaceId]);
 
   return <ContractLensContext.Provider value={value}>{children}</ContractLensContext.Provider>;
 }

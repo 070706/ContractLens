@@ -1,7 +1,9 @@
 import { ArrowRight, Bell, BookOpen, Check, LogOut, Save, Shield, SlidersHorizontal, UserRound } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import WorkspaceLayout from "@/components/WorkspaceLayout";
+import { useAuth } from "@/components/AuthContext";
+import { useContractLens } from "@/components/ContractLensContext";
 import { PageHeader, SectionTitle } from "@/components/MvpUi";
 
 const guideSteps = [
@@ -12,24 +14,41 @@ const guideSteps = [
 
 export default function Settings() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { member, settings, updateSettings } = useContractLens();
   const [saved, setSaved] = useState(false);
-  const [days, setDays] = useState([7, 14, 30]);
-  const [email, setEmail] = useState("avery@yourcompany.com");
+  const [days, setDays] = useState<number[]>([]);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [organization, setOrganization] = useState("");
   const [activeGuideStep, setActiveGuideStep] = useState(0);
+  useEffect(() => {
+    if (member) {
+      setName(member.name);
+      setEmail(member.email);
+    } else if (user?.email) {
+      setEmail(user.email);
+      setName(user.user_metadata?.full_name ?? "");
+    }
+    if (settings) {
+      setDays(settings.notificationDays);
+      setOrganization(settings.organization);
+    }
+  }, [member, settings, user]);
   const toggleDay = (day: number) => setDays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day].sort());
-  const save = () => { setSaved(true); window.setTimeout(() => setSaved(false), 2200); };
+  const save = async () => { await updateSettings({ notificationDays: days, organization }); setSaved(true); window.setTimeout(() => setSaved(false), 2200); };
   const activeStep = guideSteps[activeGuideStep];
 
   return <WorkspaceLayout title="Settings">
     <PageHeader eyebrow="Workspace settings" title="Make ContractLens yours" description="Manage notifications, team access, and intelligence preferences." action={<button onClick={save} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#c8f2e4] px-4 text-[12px] font-bold text-[#123d3a] hover:bg-[#e0faf1]"><Save className="h-4 w-4" /> {saved ? "Saved" : "Save changes"}</button>} />
     <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_0.8fr]">
       <div className="space-y-5">
-        <section className="rounded-2xl border border-[#e7edf1] bg-white p-5 md:p-6"><SectionTitle title="Profile" description="Your personal and organization details." /><div className="mt-5 grid gap-4 md:grid-cols-2"><label><span className="mb-1.5 block text-[10px] font-bold text-[#526575]">Name</span><input defaultValue="Avery Singh" className="h-10 w-full rounded-xl border border-[#dfe7eb] px-3 text-[11px] outline-none focus:border-[#8bcab7]" /></label><label><span className="mb-1.5 block text-[10px] font-bold text-[#526575]">Email</span><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className="h-10 w-full rounded-xl border border-[#dfe7eb] px-3 text-[11px] outline-none focus:border-[#8bcab7]" /></label><label className="md:col-span-2"><span className="mb-1.5 block text-[10px] font-bold text-[#526575]">Organization</span><input defaultValue="Your company" className="h-10 w-full rounded-xl border border-[#dfe7eb] px-3 text-[11px] outline-none focus:border-[#8bcab7]" /></label></div></section>
+        <section className="rounded-2xl border border-[#e7edf1] bg-white p-5 md:p-6"><SectionTitle title="Profile" description="Your personal and organization details." /><div className="mt-5 grid gap-4 md:grid-cols-2"><label><span className="mb-1.5 block text-[10px] font-bold text-[#526575]">Name</span><input value={name} onChange={(event) => setName(event.target.value)} className="h-10 w-full rounded-xl border border-[#dfe7eb] px-3 text-[11px] outline-none focus:border-[#8bcab7]" /></label><label><span className="mb-1.5 block text-[10px] font-bold text-[#526575]">Email</span><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className="h-10 w-full rounded-xl border border-[#dfe7eb] px-3 text-[11px] outline-none focus:border-[#8bcab7]" /></label><label className="md:col-span-2"><span className="mb-1.5 block text-[10px] font-bold text-[#526575]">Organization</span><input value={organization} onChange={(event) => setOrganization(event.target.value)} className="h-10 w-full rounded-xl border border-[#dfe7eb] px-3 text-[11px] outline-none focus:border-[#8bcab7]" /></label></div></section>
         <section className="rounded-2xl border border-[#e7edf1] bg-white p-5 md:p-6"><SectionTitle title="Notifications" description="Choose when ContractLens reminds you about deadlines." /><div className="mt-5 space-y-3">{[7, 14, 30].map((day) => <button key={day} onClick={() => toggleDay(day)} className="flex w-full items-center justify-between rounded-xl border border-[#edf1f4] p-3.5 text-left hover:bg-[#fbfcfd]"><span className="flex items-center gap-3"><span className={`flex h-6 w-6 items-center justify-center rounded-lg ${days.includes(day) ? "bg-[#c8f2e4] text-[#277b6b]" : "bg-[#f0f4f6] text-[#a6b2b9]"}`}>{days.includes(day) && <Check className="h-3.5 w-3.5" />}</span><span className="text-[11px] font-semibold text-[#536978]">{day} days before a deadline</span></span><Bell className="h-4 w-4 text-[#9aa8b2]" /></button>)}</div></section>
         <section className="rounded-2xl border border-[#d6e9e3] bg-[#f0faf6] p-5 md:p-6"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#438b7d]"><BookOpen className="h-4 w-4" /> Workspace guide</div><h2 className="mt-2 text-[18px] font-bold tracking-[-0.03em] text-[#23463f]">A simple path from document to decision.</h2><p className="mt-2 max-w-[560px] text-[11px] leading-relaxed text-[#6f9188]">New to ContractLens? Follow the three core steps below. Every feature is designed to keep business teams clear, action-oriented, and connected to the original contract language.</p></div><span className="hidden rounded-full bg-[#c8f2e4] px-2.5 py-1 text-[9px] font-bold text-[#277b6b] sm:inline-flex">3 STEPS</span></div><div className="mt-6 grid gap-2 md:grid-cols-3">{guideSteps.map((step, index) => <button key={step.number} onClick={() => setActiveGuideStep(index)} className={`rounded-xl border p-3 text-left transition ${activeGuideStep === index ? "border-[#a8d8c9] bg-white shadow-[0_6px_15px_rgba(53,126,106,0.06)]" : "border-[#d9eee7] bg-white/45 hover:bg-white/75"}`}><span className={`text-[10px] font-bold ${activeGuideStep === index ? "text-[#3e927b]" : "text-[#8eb1a8]"}`}>{step.number}</span><span className="mt-2 block text-[11px] font-bold text-[#3d665d]">{step.title}</span></button>)}</div><div className="mt-4 rounded-xl border border-[#d4e9e1] bg-white/75 p-4"><p className="text-[11px] leading-relaxed text-[#64877d]">{activeStep.body}</p><Link to={activeStep.href} className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-bold text-[#36806f]">{activeStep.action} <ArrowRight className="h-3 w-3" /></Link></div></section>
       </div>
       <div className="space-y-5">
-        <section className="rounded-2xl border border-[#e7edf1] bg-white p-5 md:p-6"><SectionTitle title="AI configuration" description="How ContractLens explains intelligence." /><div className="mt-5 space-y-3"><div className="rounded-xl bg-[#effaf6] p-3.5"><div className="flex items-center gap-2 text-[11px] font-bold text-[#3b796b]"><SlidersHorizontal className="h-4 w-4" /> Plain-language summaries</div><p className="mt-1 text-[10px] leading-relaxed text-[#709188]">Keep summaries concise and business-friendly.</p></div><div className="rounded-xl bg-[#f7faff] p-3.5"><div className="flex items-center gap-2 text-[11px] font-bold text-[#526eaf]"><Shield className="h-4 w-4" /> Human review stays visible</div><p className="mt-1 text-[10px] leading-relaxed text-[#8194ad]">Potential risks are surfaced, never silently decided.</p></div></div></section>
+        <section className="rounded-2xl border border-[#e7edf1] bg-white p-5 md:p-6"><SectionTitle title="AI configuration" description="How ContractLens explains intelligence." /><div className="mt-5 space-y-3"><div className="rounded-xl bg-[#effaf6] p-3.5"><div className="flex items-center gap-2 text-[11px] font-bold text-[#3b796b]"><SlidersHorizontal className="h-4 w-4" /> {settings?.aiSummaryStyle ?? ""}</div><p className="mt-1 text-[10px] leading-relaxed text-[#709188]">Keep summaries concise and business-friendly.</p></div><div className="rounded-xl bg-[#f7faff] p-3.5"><div className="flex items-center gap-2 text-[11px] font-bold text-[#526eaf]"><Shield className="h-4 w-4" /> Human review stays visible</div><p className="mt-1 text-[10px] leading-relaxed text-[#8194ad]">Potential risks are surfaced, never silently decided.</p></div></div></section>
         <section className="rounded-2xl border border-[#e7edf1] bg-white p-5 md:p-6"><SectionTitle title="Security" description="Manage access to this workspace." /><div className="mt-5 space-y-2"><button onClick={() => setSaved(true)} className="flex w-full items-center gap-3 rounded-xl border border-[#edf1f4] p-3 text-left text-[11px] font-semibold text-[#607484] hover:bg-[#fbfcfd]"><UserRound className="h-4 w-4 text-[#8da0aa]" /> Change password</button><button onClick={() => navigate("/")} className="flex w-full items-center gap-3 rounded-xl border border-[#f1dfd5] p-3 text-left text-[11px] font-semibold text-[#b66b59] hover:bg-[#fffaf7]"><LogOut className="h-4 w-4" /> Log out</button></div></section>
         <Link to="/dashboard" className="block rounded-2xl bg-[#183448] p-5 text-[11px] font-semibold text-[#b8cbd3] hover:bg-[#244b61]"><p className="text-[13px] font-bold text-white">Return to your workspace</p><p className="mt-1">Open the dashboard to see deadlines, risks, and recent activity.</p></Link>
       </div>

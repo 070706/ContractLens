@@ -7,5 +7,4 @@ if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error("Supabase environment variables are missing");
 }
 
-export const DEMO_WORKSPACE_ID = "00000000-0000-0000-0000-000000000001";
 export const supabase = createClient(supabaseUrl, supabasePublishableKey);
