@@ -17,6 +17,66 @@ export interface Contract {
   color: string;
 }
 
+export interface ContractExtractionData {
+  contract: {
+    title?: string | null;
+    reference_id?: string | null;
+    contract_type?: string | null;
+  };
+  parties: Array<{
+    name: string;
+    role: string;
+    party_type?: string | null;
+    source?: SourceReference;
+  }>;
+  dates: {
+    effective_date?: ExtractedValue;
+    expiration_date?: ExtractedValue;
+    initial_term?: ExtractedValue;
+  };
+  renewal: {
+    type?: string | null;
+    period?: string | null;
+    notice_period?: string | null;
+    conditions?: string | null;
+    source?: SourceReference;
+  };
+  payment_terms: {
+    amount?: string | null;
+    currency?: string | null;
+    frequency?: string | null;
+    payment_period?: string | null;
+    invoice_timing?: string | null;
+    late_payment_terms?: string | null;
+    source?: SourceReference;
+  };
+  termination: {
+    for_convenience?: string | null;
+    for_cause?: string | null;
+    notice_period?: string | null;
+    cure_period?: string | null;
+    special_conditions?: string[];
+    source?: SourceReference;
+  };
+  service_obligations: Array<{
+    responsible_party: string;
+    obligation: string;
+    details: string;
+    source?: SourceReference;
+  }>;
+  summary: string;
+}
+export interface SourceReference {
+  page?: number | null;
+  section?: string | null;
+  clause?: string | null;
+  text?: string | null;
+}
+export interface ExtractedValue {
+  value?: string | null;
+  source?: SourceReference;
+}
+
 export interface Clause {
   id: string;
   contractId: string;

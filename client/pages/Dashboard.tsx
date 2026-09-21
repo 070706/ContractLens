@@ -11,7 +11,7 @@ const iconMap: Record<string, LucideIcon> = { FolderOpen, CheckCircle2, Clock3, 
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { contracts, obligations, alerts, clauses, activities, loading } = useContractLens();
+  const { contracts, obligations, alerts, clauses, activities, loading, member } = useContractLens();
   const [content, setContent] = useState<DashboardContent | null>(null);
   const [metrics, setMetrics] = useState<DashboardMetric[]>([]);
   const [contentError, setContentError] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export default function Dashboard() {
   const completedPercent = totalObligations ? Math.round(obligations.filter((item) => item.status === "Completed").length / totalObligations * 100) : 0;
   const pendingPercent = totalObligations ? Math.round(pending / totalObligations * 100) : 0;
   const overduePercent = Math.max(0, 100 - completedPercent - pendingPercent);
-  const displayName = user?.user_metadata?.full_name?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "";
+  const displayName = member?.name?.split(" ")[0] ?? user?.user_metadata?.full_name?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "";
   const metricValues: Record<string, number> = { totalContracts, activeContracts, expiringSoon, pendingObligations: pending, overdueObligations: overdue, reviewItems };
   const metricDetails: Record<string, string> = { totalContracts: `${totalContracts}`, activeContracts: `${activePercent}%`, expiringSoon: `${expiringSoon}`, pendingObligations: `${pending}`, overdueObligations: `${overdue}`, reviewItems: `${reviewItems}` };
   const renewals = useMemo(() => contracts.filter((contract) => contract.renewal).slice(0, 3), [contracts]);

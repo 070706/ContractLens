@@ -64,6 +64,32 @@ create table if not exists public.contract_clauses (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.contract_documents (
+  id uuid primary key default gen_random_uuid(),
+  contract_id uuid not null references public.contracts(id) on delete cascade,
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  file_name text not null,
+  storage_path text not null unique,
+  mime_type text not null default 'application/pdf',
+  file_size bigint not null,
+  page_count integer,
+  processing_status text not null check (processing_status in ('UPLOADING', 'EXTRACTING', 'ANALYZING', 'SAVING', 'COMPLETED', 'FAILED')),
+  error_message text,
+  processed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.contract_extractions (
+  id uuid primary key default gen_random_uuid(),
+  contract_id uuid not null references public.contracts(id) on delete cascade,
+  document_id uuid not null unique references public.contract_documents(id) on delete cascade,
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.contract_versions (
   id uuid primary key default gen_random_uuid(),
   contract_id uuid not null references public.contracts(id) on delete cascade,
@@ -530,6 +556,8 @@ alter table public.contracts enable row level security;
 alter table public.obligations enable row level security;
 alter table public.alerts enable row level security;
 alter table public.contract_clauses enable row level security;
+alter table public.contract_documents enable row level security;
+alter table public.contract_extractions enable row level security;
 alter table public.contract_versions enable row level security;
 alter table public.activities enable row level security;
 alter table public.workspace_members enable row level security;
@@ -578,6 +606,8 @@ drop policy if exists contracts_insert on public.contracts;
 create policy contracts_insert on public.contracts for insert to authenticated with check (public.user_owns_workspace(workspace_id));
 drop policy if exists contracts_update on public.contracts;
 create policy contracts_update on public.contracts for update to authenticated using (public.user_owns_workspace(workspace_id)) with check (public.user_owns_workspace(workspace_id));
+drop policy if exists contracts_delete on public.contracts;
+create policy contracts_delete on public.contracts for delete to authenticated using (public.user_owns_workspace(workspace_id));
 drop policy if exists obligations_read on public.obligations;
 create policy obligations_read on public.obligations for select to authenticated using (public.user_owns_workspace(workspace_id));
 drop policy if exists obligations_update on public.obligations;
@@ -588,13 +618,48 @@ drop policy if exists alerts_update on public.alerts;
 create policy alerts_update on public.alerts for update to authenticated using (public.user_owns_workspace(workspace_id)) with check (public.user_owns_workspace(workspace_id));
 drop policy if exists clauses_read on public.contract_clauses;
 create policy clauses_read on public.contract_clauses for select to authenticated using (exists (select 1 from public.contracts where contracts.id = contract_clauses.contract_id and public.user_owns_workspace(contracts.workspace_id)));
+drop policy if exists clauses_insert on public.contract_clauses;
+create policy clauses_insert on public.contract_clauses for insert to authenticated with check (exists (select 1 from public.contracts where contracts.id = contract_clauses.contract_id and public.user_owns_workspace(contracts.workspace_id)));
+drop policy if exists clauses_delete on public.contract_clauses;
+create policy clauses_delete on public.contract_clauses for delete to authenticated using (exists (select 1 from public.contracts where contracts.id = contract_clauses.contract_id and public.user_owns_workspace(contracts.workspace_id)));
+drop policy if exists documents_read on public.contract_documents;
+create policy documents_read on public.contract_documents for select to authenticated using (public.user_owns_workspace(workspace_id));
+drop policy if exists documents_insert on public.contract_documents;
+create policy documents_insert on public.contract_documents for insert to authenticated with check (user_id = auth.uid() and public.user_owns_workspace(workspace_id));
+drop policy if exists documents_update on public.contract_documents;
+create policy documents_update on public.contract_documents for update to authenticated using (public.user_owns_workspace(workspace_id)) with check (public.user_owns_workspace(workspace_id));
+drop policy if exists extractions_read on public.contract_extractions;
+create policy extractions_read on public.contract_extractions for select to authenticated using (public.user_owns_workspace(workspace_id));
+drop policy if exists extractions_insert on public.contract_extractions;
+create policy extractions_insert on public.contract_extractions for insert to authenticated with check (public.user_owns_workspace(workspace_id));
+drop policy if exists extractions_update on public.contract_extractions;
+create policy extractions_update on public.contract_extractions for update to authenticated using (public.user_owns_workspace(workspace_id)) with check (public.user_owns_workspace(workspace_id));
 drop policy if exists versions_read on public.contract_versions;
 create policy versions_read on public.contract_versions for select to authenticated using (exists (select 1 from public.contracts where contracts.id = contract_versions.contract_id and public.user_owns_workspace(contracts.workspace_id)));
 drop policy if exists activities_read on public.activities;
 create policy activities_read on public.activities for select to authenticated using (public.user_owns_workspace(workspace_id));
+drop policy if exists activities_insert on public.activities;
+create policy activities_insert on public.activities for insert to authenticated with check (public.user_owns_workspace(workspace_id));
 drop policy if exists members_read on public.workspace_members;
 create policy members_read on public.workspace_members for select to authenticated using (user_id = auth.uid());
+drop policy if exists members_update on public.workspace_members;
+create policy members_update on public.workspace_members for update to authenticated using (user_id = auth.uid() and public.user_owns_workspace(workspace_id)) with check (user_id = auth.uid() and public.user_owns_workspace(workspace_id));
 drop policy if exists settings_read on public.workspace_settings;
 create policy settings_read on public.workspace_settings for select to authenticated using (public.user_owns_workspace(workspace_id));
+drop policy if exists settings_insert on public.workspace_settings;
+create policy settings_insert on public.workspace_settings for insert to authenticated with check (public.user_owns_workspace(workspace_id));
 drop policy if exists settings_update on public.workspace_settings;
 create policy settings_update on public.workspace_settings for update to authenticated using (public.user_owns_workspace(workspace_id)) with check (public.user_owns_workspace(workspace_id));
+
+insert into storage.buckets (id, name, public)
+values ('contract-documents', 'contract-documents', false)
+on conflict (id) do update set public = false;
+
+drop policy if exists contract_documents_storage_read on storage.objects;
+create policy contract_documents_storage_read on storage.objects for select to authenticated using (
+  bucket_id = 'contract-documents' and (storage.foldername(name))[2] = auth.uid()::text
+);
+drop policy if exists contract_documents_storage_insert on storage.objects;
+create policy contract_documents_storage_insert on storage.objects for insert to authenticated with check (
+  bucket_id = 'contract-documents' and (storage.foldername(name))[1] = 'contracts' and (storage.foldername(name))[2] = auth.uid()::text
+);

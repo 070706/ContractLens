@@ -1,21 +1,15 @@
 import { ArrowRight, Bell, BookOpen, Check, LogOut, Save, Shield, SlidersHorizontal, UserRound } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import WorkspaceLayout from "@/components/WorkspaceLayout";
 import { useAuth } from "@/components/AuthContext";
 import { useContractLens } from "@/components/ContractLensContext";
 import { PageHeader, SectionTitle } from "@/components/MvpUi";
 
-const guideSteps = [
-  { number: "01", title: "Upload a contract", body: "Start with a PDF or DOCX. ContractLens preserves pages, sections, and clause boundaries as it processes the document.", href: "/contracts/upload", action: "Open upload" },
-  { number: "02", title: "Review the intelligence", body: "Open the contract detail workspace to check extracted facts, clauses, obligations, risks, versions, and source references.", href: "/contracts/acme-cloud?tab=overview", action: "View example contract" },
-  { number: "03", title: "Stay ahead of deadlines", body: "Use obligations and alerts to assign ownership, mark work complete, and catch renewal windows before they become urgent.", href: "/obligations", action: "Open obligations" },
-];
-
 export default function Settings() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { member, settings, updateSettings } = useContractLens();
+  const { member, settings, updateSettings, contracts, obligations, error } = useContractLens();
   const [saved, setSaved] = useState(false);
   const [days, setDays] = useState<number[]>([]);
   const [name, setName] = useState("");
@@ -36,11 +30,34 @@ export default function Settings() {
     }
   }, [member, settings, user]);
   const toggleDay = (day: number) => setDays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day].sort());
-  const save = async () => { await updateSettings({ notificationDays: days, organization }); setSaved(true); window.setTimeout(() => setSaved(false), 2200); };
-  const activeStep = guideSteps[activeGuideStep];
+  const save = async () => {
+    const didSave = await updateSettings({
+      name,
+      organization,
+      notificationDays: days,
+      aiSummaryStyle: settings?.aiSummaryStyle ?? "Plain-language summaries",
+    });
+    if (didSave) {
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2200);
+    }
+  };
+  const guideSteps = useMemo(() => {
+    const firstContract = contracts[0];
+    const nextObligation = obligations[0];
+
+    return [
+      { number: "01", title: "Upload a contract", body: firstContract ? `Start with ${firstContract.name}. ContractLens will keep the document, clause structure, and extracted obligations connected in one workspace.` : "Start with a PDF or DOCX. ContractLens preserves pages, sections, and clause boundaries as it processes the document.", href: "/contracts/upload", action: "Open upload" },
+      { number: "02", title: "Review the intelligence", body: firstContract ? `Open ${firstContract.name} to inspect extracted facts, clauses, obligations, risks, versions, and source references.` : "Open the contract detail workspace to inspect extracted facts, clauses, obligations, risks, versions, and source references.", href: firstContract ? `/contracts/${firstContract.id}?tab=overview` : "/contracts", action: firstContract ? `View ${firstContract.name}` : "Open contracts" },
+      { number: "03", title: "Stay ahead of deadlines", body: nextObligation ? `Use the obligation tracker to focus on ${nextObligation.title} and address upcoming deadlines before they become urgent.` : "Use obligations and alerts to assign ownership, mark work complete, and catch renewal windows before they become urgent.", href: "/obligations", action: "Open obligations" },
+    ];
+  }, [contracts, obligations]);
+
+  const activeStep = guideSteps[Math.min(activeGuideStep, guideSteps.length - 1)] ?? guideSteps[0];
 
   return <WorkspaceLayout title="Settings">
     <PageHeader eyebrow="Workspace settings" title="Make ContractLens yours" description="Manage notifications, team access, and intelligence preferences." action={<button onClick={save} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#c8f2e4] px-4 text-[12px] font-bold text-[#123d3a] hover:bg-[#e0faf1]"><Save className="h-4 w-4" /> {saved ? "Saved" : "Save changes"}</button>} />
+    {error && <p className="mt-4 rounded-xl border border-[#f1d7d1] bg-[#fff7f5] px-4 py-3 text-[11px] text-[#a95748]">{error}</p>}
     <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_0.8fr]">
       <div className="space-y-5">
         <section className="rounded-2xl border border-[#e7edf1] bg-white p-5 md:p-6"><SectionTitle title="Profile" description="Your personal and organization details." /><div className="mt-5 grid gap-4 md:grid-cols-2"><label><span className="mb-1.5 block text-[10px] font-bold text-[#526575]">Name</span><input value={name} onChange={(event) => setName(event.target.value)} className="h-10 w-full rounded-xl border border-[#dfe7eb] px-3 text-[11px] outline-none focus:border-[#8bcab7]" /></label><label><span className="mb-1.5 block text-[10px] font-bold text-[#526575]">Email</span><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className="h-10 w-full rounded-xl border border-[#dfe7eb] px-3 text-[11px] outline-none focus:border-[#8bcab7]" /></label><label className="md:col-span-2"><span className="mb-1.5 block text-[10px] font-bold text-[#526575]">Organization</span><input value={organization} onChange={(event) => setOrganization(event.target.value)} className="h-10 w-full rounded-xl border border-[#dfe7eb] px-3 text-[11px] outline-none focus:border-[#8bcab7]" /></label></div></section>
